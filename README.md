@@ -70,7 +70,8 @@ O repositório expõe um módulo NixOS. No seu `configuration.nix` (ou em
 
 ```nix
 let
-  oc = builtins.getFlake "github:matheusrosafogo/onlyoffice-opencode";
+  # Pine uma tag ou revisão para atualizações previsíveis:
+  oc = builtins.getFlake "github:matheusrosafogo/onlyoffice-opencode/v0.3.0";
 in
 {
   imports = [ oc.nixosModules.default ];
@@ -81,6 +82,10 @@ in
   };
 }
 ```
+
+> Prefira fixar uma tag ou revisão (`.../v0.3.0` ou `.../<commit>`). O
+> `builtins.getFlake` sem revisão pode continuar usando uma resolução em cache
+> até você forçar a atualização do flake.
 
 Depois:
 
