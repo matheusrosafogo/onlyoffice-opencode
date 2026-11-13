@@ -291,6 +291,10 @@ quantidade de modelos/agentes — sem o token.
 - PDF é somente leitura; a inserção fica desabilitada.
 - Em planilhas e apresentações a inserção é texto simples; formatação rica
   nessas editores fica para uma próxima versão.
+- No Writer, a formatação é mapeada para os estilos do ONLYOFFICE (títulos,
+  negrito, itálico, listas, tabelas, citações e código). Fontes, cores,
+  tamanhos, espaçamento e alinhamento específicos pedidos no texto ainda não
+  são aplicados automaticamente.
 - Track changes e comentários automáticos ficam para uma próxima versão.
 - O agente não edita o documento diretamente; você aplica a resposta com os
   botões do painel.
