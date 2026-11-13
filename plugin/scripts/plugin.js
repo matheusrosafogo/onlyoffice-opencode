@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const PLUGIN_VERSION = "0.3.0";
+  const PLUGIN_VERSION = "0.3.1";
   const STORAGE_KEY = "oo-opencode.settings.v1";
   const DEFAULT_BRIDGE_URL = "http://127.0.0.1:18765";
   const DEFAULT_BRIDGE_TOKEN = "onlyoffice-opencode-local";
@@ -66,6 +66,8 @@
       "setting-include-document",
     );
     els.settingRichInsert = document.getElementById("setting-rich-insert");
+    els.settingTrackChanges = document.getElementById("setting-track-changes");
+    els.toggleTrackChanges = document.getElementById("toggle-track-changes");
     els.settingLanguage = document.getElementById("setting-language");
     els.connectionResult = document.getElementById("connection-result");
     els.diagnostics = document.getElementById("diagnostics");
@@ -84,6 +86,7 @@
       agent: "",
       includeDocument: true,
       richInsert: true,
+      trackChanges: false,
       lang: window.OO_I18N.detect(),
     };
 
@@ -1009,6 +1012,71 @@
 
   // ---------------------------------------------------------------- ações
 
+  async function withTrackChanges(enabled, fn) {
+    if (!enabled || state.editorType !== "word") {
+      return fn(false);
+    }
+
+    let previous = false;
+    try {
+      previous = await ctx.runInEditor(() => {
+        const doc = Api.GetDocument();
+        return doc.IsTrackRevisions ? Boolean(doc.IsTrackRevisions()) : false;
+      });
+    } catch {
+      previous = false;
+    }
+
+    if (previous) {
+      return fn(true);
+    }
+
+    let trackingMode = null;
+    try {
+      trackingMode = await ctx.runInEditor(() => {
+        const doc = Api.GetDocument();
+        if (doc.SetAssistantTrackRevisions) {
+          try {
+            doc.SetAssistantTrackRevisions(true, "OpenCode");
+            return "assistant";
+          } catch {
+            // cai para o modo de revisão padrão
+          }
+        }
+        if (doc.SetTrackRevisions) {
+          doc.SetTrackRevisions(true);
+          return "standard";
+        }
+        return null;
+      });
+    } catch (error) {
+      console.warn("[opencode] track changes", error);
+      trackingMode = null;
+    }
+
+    if (!trackingMode) {
+      toast(t("trackChangesUnavailable"), "warn");
+      return fn(false);
+    }
+
+    try {
+      return await fn(true);
+    } finally {
+      try {
+        await ctx.runInEditor((mode) => {
+          const doc = Api.GetDocument();
+          if (mode === "assistant" && doc.SetAssistantTrackRevisions) {
+            doc.SetAssistantTrackRevisions(false);
+          } else if (doc.SetTrackRevisions) {
+            doc.SetTrackRevisions(false);
+          }
+        }, trackingMode);
+      } catch (error) {
+        console.warn("[opencode] restore track changes", error);
+      }
+    }
+  }
+
   async function pasteRich(text) {
     if (!md.toHtml) return false;
     const html = md.toHtml(text);
@@ -1018,37 +1086,50 @@
   }
 
   async function insertText(text) {
+    const spec = officeDoc && officeDoc.extract(text);
+    const requestedTrackChanges =
+      spec && spec.trackChanges !== undefined
+        ? Boolean(spec.trackChanges)
+        : Boolean(state.settings.trackChanges);
+
     try {
-      const spec = officeDoc && officeDoc.extract(text);
-      if (spec && state.editorType === "word") {
-        try {
-          const result = await officeDoc.apply(spec);
-          toast(t("insertedFormatted"), "success");
-          if (result && result.skipped) {
-            console.warn(
-              "[opencode] blocos ignorados no office-doc:",
-              result.skipped,
+      await withTrackChanges(requestedTrackChanges, async (tracked) => {
+        if (spec && state.editorType === "word") {
+          try {
+            const result = await officeDoc.apply(spec);
+            toast(
+              tracked ? t("insertedTracked") : t("insertedFormatted"),
+              "success",
             );
-          }
-          return;
-        } catch (error) {
-          console.warn("[opencode] office-doc", error);
-        }
-      }
-
-      if (state.settings.richInsert && state.editorType === "word") {
-        try {
-          if (await pasteRich(text)) {
-            toast(t("insertedFormatted"), "success");
+            if (result && result.skipped) {
+              console.warn(
+                "[opencode] blocos ignorados no office-doc:",
+                result.skipped,
+              );
+            }
             return;
+          } catch (error) {
+            console.warn("[opencode] office-doc", error);
           }
-        } catch (error) {
-          console.warn("[opencode] PasteHtml", error);
         }
-      }
 
-      await ctx.executeMethod("PasteText", [text]);
-      toast(t("inserted"), "success");
+        if (state.settings.richInsert && state.editorType === "word") {
+          try {
+            if (await pasteRich(text)) {
+              toast(
+                tracked ? t("insertedTracked") : t("insertedFormatted"),
+                "success",
+              );
+              return;
+            }
+          } catch (error) {
+            console.warn("[opencode] PasteHtml", error);
+          }
+        }
+
+        await ctx.executeMethod("PasteText", [text]);
+        toast(tracked ? t("insertedTracked") : t("inserted"), "success");
+      });
     } catch (error) {
       console.warn("[opencode] insert", error);
       toast(t("insertError"), "error");
@@ -1056,58 +1137,71 @@
   }
 
   async function replaceSelection(text) {
-    try {
-      if (state.editorType === "word") {
-        const spec = officeDoc && officeDoc.extract(text);
-        if (spec) {
-          try {
-            await officeDoc.apply(spec, { replaceSelection: true });
-            toast(t("replacedFormatted"), "success");
-            return;
-          } catch (error) {
-            console.warn("[opencode] replace office-doc", error);
-            toast(t("replaceError"), "error");
-            return;
-          }
-        }
+    const spec = officeDoc && officeDoc.extract(text);
+    const requestedTrackChanges =
+      spec && spec.trackChanges !== undefined
+        ? Boolean(spec.trackChanges)
+        : Boolean(state.settings.trackChanges);
 
-        if (state.settings.richInsert) {
-          try {
-            await ctx.runInEditor(() => {
-              const range = Api.GetDocument().GetRangeBySelect();
-              if (range && range.Delete) range.Delete();
-            });
-            if (await pasteRich(text)) {
-              toast(t("replacedFormatted"), "success");
+    try {
+      await withTrackChanges(requestedTrackChanges, async (tracked) => {
+        if (state.editorType === "word") {
+          if (spec) {
+            try {
+              await officeDoc.apply(spec, { replaceSelection: true });
+              toast(
+                tracked ? t("replacedTracked") : t("replacedFormatted"),
+                "success",
+              );
+              return;
+            } catch (error) {
+              console.warn("[opencode] replace office-doc", error);
+              toast(t("replaceError"), "error");
               return;
             }
-          } catch (error) {
-            console.warn("[opencode] replace rich", error);
           }
+
+          if (state.settings.richInsert) {
+            try {
+              await ctx.runInEditor(() => {
+                const range = Api.GetDocument().GetRangeBySelect();
+                if (range && range.Delete) range.Delete();
+              });
+              if (await pasteRich(text)) {
+                toast(
+                  tracked ? t("replacedTracked") : t("replacedFormatted"),
+                  "success",
+                );
+                return;
+              }
+            } catch (error) {
+              console.warn("[opencode] replace rich", error);
+            }
+          }
+
+          await ctx.runInEditor(
+            (value) => Api.ReplaceTextSmart(value.split(/\r?\n/)),
+            text,
+          );
+          toast(tracked ? t("replacedTracked") : t("replaced"), "success");
+          return;
         }
 
-        await ctx.runInEditor(
-          (value) => Api.ReplaceTextSmart(value.split(/\r?\n/)),
-          text,
-        );
+        if (state.editorType === "cell") {
+          const ok = await ctx.runInEditor((value) => {
+            const selection = Api.GetSelection();
+            if (selection && selection.SetValue) {
+              selection.SetValue(value);
+              return true;
+            }
+            return false;
+          }, text);
+          if (!ok) await ctx.executeMethod("PasteText", [text]);
+        } else {
+          await ctx.executeMethod("PasteText", [text]);
+        }
         toast(t("replaced"), "success");
-        return;
-      }
-
-      if (state.editorType === "cell") {
-        const ok = await ctx.runInEditor((value) => {
-          const selection = Api.GetSelection();
-          if (selection && selection.SetValue) {
-            selection.SetValue(value);
-            return true;
-          }
-          return false;
-        }, text);
-        if (!ok) await ctx.executeMethod("PasteText", [text]);
-      } else {
-        await ctx.executeMethod("PasteText", [text]);
-      }
-      toast(t("replaced"), "success");
+      });
     } catch (error) {
       console.warn("[opencode] replace", error);
       toast(t("replaceError"), "error");
@@ -1420,6 +1514,7 @@
       state.settings.includeDocument,
     );
     els.settingRichInsert.checked = Boolean(state.settings.richInsert);
+    els.settingTrackChanges.checked = Boolean(state.settings.trackChanges);
     els.settingLanguage.value = state.settings.lang || window.OO_I18N.getLang();
     els.connectionResult.textContent = "";
 
@@ -1474,6 +1569,8 @@
     state.settings.agent = els.settingAgent.value || "";
     state.settings.includeDocument = els.settingIncludeDocument.checked;
     state.settings.richInsert = els.settingRichInsert.checked;
+    state.settings.trackChanges = els.settingTrackChanges.checked;
+    els.toggleTrackChanges.checked = state.settings.trackChanges;
     state.settings.lang = els.settingLanguage.value || "pt-BR";
 
     window.OO_I18N.setLang(state.settings.lang);
@@ -1515,6 +1612,13 @@
 
     els.send.addEventListener("click", () => send());
     els.stop.addEventListener("click", () => interrupt());
+    els.toggleTrackChanges.addEventListener("change", () => {
+      state.settings.trackChanges = els.toggleTrackChanges.checked;
+      if (els.settingTrackChanges) {
+        els.settingTrackChanges.checked = state.settings.trackChanges;
+      }
+      saveSettings();
+    });
     els.newChat.addEventListener("click", () => newChat());
     els.settings.addEventListener("click", () => openSettings());
     els.refreshContext.addEventListener("click", async () => {
@@ -1604,6 +1708,7 @@
     cacheElements();
     state.settings = loadSettings();
     window.OO_I18N.setLang(state.settings.lang || window.OO_I18N.detect());
+    els.toggleTrackChanges.checked = Boolean(state.settings.trackChanges);
 
     md.setCopyHandler((text) => copyText(text, true));
     bindUi();
@@ -1616,6 +1721,14 @@
 
   // Registra tema/tradução antes do host chamar init.
   setupTheme();
+
+  // Utilidades internas para diagnóstico/testes via DevTools.
+  window.OO_PLUGIN_DEBUG = {
+    insertText,
+    replaceSelection,
+    withTrackChanges,
+    getSettings: () => ({ ...state.settings }),
+  };
 
   // O host do ONLYOFFICE chama Asc.plugin.init quando o painel abre.
   if (window.Asc && window.Asc.plugin) {

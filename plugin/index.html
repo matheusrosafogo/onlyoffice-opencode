@@ -76,6 +76,10 @@
             aria-label="Mensagem"
           ></textarea>
           <div class="composer-actions">
+            <label class="track-toggle" data-i18n-title="trackChangesHint">
+              <input id="toggle-track-changes" type="checkbox" />
+              <span data-i18n="trackChanges">Revisões</span>
+            </label>
             <span id="context-hint" class="context-hint"></span>
             <button
               id="btn-stop"
@@ -170,6 +174,12 @@
             Títulos, negrito, listas e tabelas são aplicados no documento. Em
             planilhas e apresentações a inserção continua sendo texto simples.
           </p>
+          <label class="checkbox">
+            <input id="setting-track-changes" type="checkbox" />
+            <span data-i18n="trackChangesHint"
+              >Inserir como Track Changes no Writer (autor: OpenCode)</span
+            >
+          </label>
           <p class="hint" data-i18n="contextHint">
             O conteúdo do documento é enviado ao provedor do modelo escolhido.
             Se o documento for muito grande, ele será truncado.

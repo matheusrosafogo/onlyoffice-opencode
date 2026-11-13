@@ -27,6 +27,8 @@ texto gerado.
 - Formatação avançada via bloco `office-doc`: fontes, tamanhos, cores,
   espaçamento, alinhamento, margens, quebras de página, tabelas nativas e
   caixas de texto/quadros.
+- Track Changes no Writer: inserir ou substituir conteúdo como revisão
+  atribuída a "OpenCode", com aceitar/rejeitar na aba Revisão.
 - Ações rápidas: resumir, revisar, melhorar escrita, traduzir, explicar e
   layout avançado.
 - Modelos e agentes lidos da configuração global do OpenCode.
@@ -282,6 +284,24 @@ O schema completo também fica em `bridge/workspace/AGENTS.md`, que o OpenCode
 lê como instruções do workspace. A ação rápida **Layout avançado** pede uma
 resposta nesse formato.
 
+### Track Changes
+
+Ative **Revisões** no rodapé do painel ou em **Configurações → Inserir como
+Track Changes no Writer**. Ao inserir ou substituir conteúdo, o plugin:
+
+1. verifica se o Track Changes já está ligado;
+2. se não estiver, ativa o modo de revisão assistida com autor `OpenCode`;
+3. insere o conteúdo como revisão;
+4. restaura o estado anterior ao terminar.
+
+As revisões aparecem na aba **Revisão** do ONLYOFFICE, onde você pode
+aceitá-las ou rejeitá-las. No bloco `office-doc`, use `"trackChanges": true`
+para forçar revisões naquela inserção ou `false` para ignorar a preferência do
+painel.
+
+Track Changes é aplicado apenas no Writer. Planilhas e apresentações continuam
+com inserção de texto simples; PDFs não são modificados.
+
 ## Como funcionam as sessões e as credenciais
 
 O bridge usa um banco isolado do OpenCode (`OPENCODE_DB`) para não misturar as
@@ -373,7 +393,8 @@ quantidade de modelos/agentes — sem o token.
   tamanhos, espaçamento, margens e alinhamento específicos, use o bloco
   `office-doc`; o modelo é instruído a usá-lo quando você pedir esse nível de
   formatação.
-- Track changes e comentários automáticos ficam para uma próxima versão.
+- Comentários automáticos ficam para uma próxima versão. Track Changes já está
+  disponível no Writer.
 - O agente não edita o documento diretamente; você aplica a resposta com os
   botões do painel.
 - Atualizações da instalação manual exigem baixar/reinstalar o `.plugin` e

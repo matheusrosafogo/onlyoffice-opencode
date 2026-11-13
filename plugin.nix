@@ -12,7 +12,7 @@ let
 in
 stdenvNoCC.mkDerivation {
   pname = "onlyoffice-opencode-plugin";
-  version = "0.3.0";
+  version = "0.3.1";
 
   src = ./plugin;
   dontBuild = true;

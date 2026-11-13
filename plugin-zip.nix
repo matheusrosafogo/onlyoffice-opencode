@@ -7,7 +7,7 @@
 
 stdenvNoCC.mkDerivation {
   pname = "onlyoffice-opencode-plugin-zip";
-  version = "0.3.0";
+  version = "0.3.1";
 
   nativeBuildInputs = [ zip ];
 

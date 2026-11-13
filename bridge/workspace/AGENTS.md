@@ -42,8 +42,9 @@ relevante.
 ## Formatação avançada com `office-doc`
 
 Quando o usuário pedir fontes específicas, tamanhos, cores, espaçamento,
-alinhamento, margens, quebras de página, tabelas ou quadros/caixas de texto,
-devolva o documento em um bloco `office-doc` com JSON neste formato:
+alinhamento, margens, quebras de página, tabelas ou quadros/caixas de texto no
+editor de texto (Writer), devolva o documento em um bloco `office-doc` com JSON
+neste formato:
 
 ```office-doc
 {
@@ -98,6 +99,10 @@ devolva o documento em um bloco `office-doc` com JSON neste formato:
 
 Regras:
 
+- `trackChanges` (opcional, booleano, no topo do JSON): quando `true`, o painel
+  ativa o Track Changes e registra a inserção como revisão atribuída a
+  "OpenCode". Use quando o usuário pedir para inserir como revisão/controle de
+  alterações; caso contrário, omita para respeitar a preferência do painel.
 - `blocks[].type`: `heading`, `paragraph`, `list`, `pageBreak`, `table` ou
   `textBox`.
 - Propriedades de texto (no bloco, em `runs` ou em células): `font` (nome

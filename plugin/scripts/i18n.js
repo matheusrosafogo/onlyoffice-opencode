@@ -35,6 +35,9 @@
       richInsert: "Aplicar formatação ao inserir no Writer (Markdown)",
       richInsertHint:
         "Títulos, negrito, listas e tabelas são aplicados no documento. Em planilhas e apresentações a inserção continua sendo texto simples.",
+      trackChanges: "Revisões",
+      trackChangesHint:
+        "Inserir como Track Changes no Writer (autor: OpenCode)",
       contextHint:
         "O conteúdo do documento é enviado ao provedor do modelo escolhido. Se o documento for muito grande, ele será truncado.",
       language: "Idioma da interface",
@@ -72,9 +75,13 @@
       insert: "Inserir no cursor",
       inserted: "Texto inserido",
       insertedFormatted: "Texto formatado inserido",
+      insertedTracked: "Inserido como revisão (OpenCode)",
       replace: "Substituir seleção",
       replaced: "Seleção substituída",
       replacedFormatted: "Seleção substituída com formatação",
+      replacedTracked: "Seleção substituída como revisão (OpenCode)",
+      trackChangesUnavailable:
+        "Track Changes indisponível; o conteúdo foi inserido normalmente.",
       insertError: "Não foi possível inserir o texto",
       replaceError: "Não foi possível substituir a seleção",
       bridgeOffline:
@@ -165,6 +172,8 @@
       richInsert: "Apply formatting when inserting into Writer (Markdown)",
       richInsertHint:
         "Headings, bold, lists and tables are applied to the document. In spreadsheets and presentations the insertion remains plain text.",
+      trackChanges: "Track Changes",
+      trackChangesHint: "Insert as Track Changes in Writer (author: OpenCode)",
       contextHint:
         "The document content is sent to the provider of the selected model. Very large documents are truncated.",
       language: "Interface language",
@@ -203,9 +212,13 @@
       insert: "Insert at cursor",
       inserted: "Text inserted",
       insertedFormatted: "Formatted text inserted",
+      insertedTracked: "Inserted as a tracked change (OpenCode)",
       replace: "Replace selection",
       replaced: "Selection replaced",
       replacedFormatted: "Selection replaced with formatting",
+      replacedTracked: "Selection replaced as a tracked change (OpenCode)",
+      trackChangesUnavailable:
+        "Track Changes unavailable; content was inserted normally.",
       insertError: "Could not insert the text",
       replaceError: "Could not replace the selection",
       bridgeOffline:

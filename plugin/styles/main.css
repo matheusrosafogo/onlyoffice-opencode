@@ -834,6 +834,29 @@ button {
   padding: 4px 7px 7px;
 }
 
+.track-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 9.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.track-toggle input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.track-toggle:has(input:checked) {
+  color: var(--accent);
+}
+
 .context-hint {
   margin-right: auto;
   color: var(--muted);

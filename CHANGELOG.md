@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1
+
+- Track Changes no Writer: inserir e substituir conteúdo como revisão
+  atribuída ao autor `OpenCode`.
+- Toggle "Revisões" no rodapé do painel e opção correspondente nas
+  configurações.
+- Suporte a `"trackChanges": true|false` no bloco `office-doc`.
+- O estado anterior do Track Changes é restaurado após a inserção.
+- Foco em documentos (Writer); planilhas e apresentações continuam com texto
+  simples e PDFs não são modificados.
+
 ## 0.3.0
 
 - Formatação avançada no Writer via bloco `office-doc`: fontes, tamanhos,
