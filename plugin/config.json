@@ -1,0 +1,40 @@
+{
+  "name": "OpenCode",
+  "nameLocale": {
+    "pt-BR": "OpenCode",
+    "en-US": "OpenCode"
+  },
+  "guid": "asc.{3BBC9184-28C3-4466-8582-F19DD990D4D9}",
+  "version": "0.1.0",
+  "minVersion": "10.0.0",
+  "variations": [
+    {
+      "description": "Agente OpenCode integrado ao ONLYOFFICE: converse com o documento, resuma, revise, traduza e insira o resultado.",
+      "descriptionLocale": {
+        "pt-BR": "Agente OpenCode integrado ao ONLYOFFICE: converse com o documento, resuma, revise, traduza e insira o resultado.",
+        "en-US": "OpenCode agent inside ONLYOFFICE: chat with the document, summarize, review, translate and insert the result."
+      },
+      "url": "index.html",
+      "icons": "resources/%theme-type%(light|dark)/icon%scale%(default).%extension%(png)",
+      "isViewer": true,
+      "isDisplayedInViewer": true,
+      "EditorsSupport": ["word", "cell", "slide", "pdf"],
+      "type": "panelRight",
+      "initDataType": "none",
+      "buttons": [],
+      "events": [],
+      "store": {
+        "background": {
+          "light": "#eef4ff",
+          "dark": "#1f2a3a"
+        },
+        "categories": ["work", "specAbilities"],
+        "icons": {
+          "light": "resources/light",
+          "dark": "resources/dark"
+        }
+      }
+    }
+  ],
+  "onlyofficeScheme": false
+}

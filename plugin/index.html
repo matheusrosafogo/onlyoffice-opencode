@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenCode</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script src="../v1/plugins.js"></script>
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">›_</span>
+          <span class="brand-name">OpenCode</span>
+        </div>
+        <div class="header-actions">
+          <button
+            id="btn-new"
+            class="icon-button"
+            type="button"
+            data-i18n-title="newChat"
+            aria-label="Nova conversa"
+          >
+            +
+          </button>
+          <button
+            id="btn-settings"
+            class="icon-button"
+            type="button"
+            data-i18n-title="settings"
+            aria-label="Configurações"
+          >
+            ⚙
+          </button>
+        </div>
+      </header>
+
+      <div id="status-banner" class="banner hidden" role="status"></div>
+
+      <section class="context-bar" aria-label="Contexto do documento">
+        <div class="context-main">
+          <span id="context-title" class="context-title" data-i18n="document"
+            >Documento</span
+          >
+          <span id="context-detail" class="context-detail"></span>
+        </div>
+        <button
+          id="btn-refresh-context"
+          class="text-button"
+          type="button"
+          data-i18n="refresh"
+        >
+          Atualizar
+        </button>
+      </section>
+
+      <main id="messages" class="messages" aria-live="polite"></main>
+
+      <div
+        id="permission-panel"
+        class="permission-panel hidden"
+        role="alertdialog"
+        aria-modal="true"
+      ></div>
+
+      <footer class="composer">
+        <div id="quick-actions" class="quick-actions"></div>
+        <div class="composer-box">
+          <textarea
+            id="input"
+            class="input"
+            rows="1"
+            data-i18n-placeholder="messagePlaceholder"
+            placeholder="Pergunte sobre o documento…"
+            aria-label="Mensagem"
+          ></textarea>
+          <div class="composer-actions">
+            <span id="context-hint" class="context-hint"></span>
+            <button
+              id="btn-stop"
+              class="secondary hidden"
+              type="button"
+              data-i18n="stop"
+            >
+              Parar
+            </button>
+            <button
+              id="btn-send"
+              class="primary"
+              type="button"
+              data-i18n="send"
+              disabled
+            >
+              Enviar
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <dialog id="settings-dialog" class="dialog">
+      <div class="dialog-header">
+        <h2 data-i18n="settings">Configurações</h2>
+        <button
+          id="btn-settings-close"
+          class="icon-button"
+          type="button"
+          data-i18n-title="close"
+          aria-label="Fechar"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="dialog-body">
+        <section class="settings-section">
+          <h3 data-i18n="connection">Conexão</h3>
+          <label class="field">
+            <span data-i18n="bridgeUrl">URL do bridge</span>
+            <input id="setting-bridge-url" type="text" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span data-i18n="bridgeToken">Token do bridge</span>
+            <input id="setting-bridge-token" type="text" spellcheck="false" />
+          </label>
+          <div class="settings-row">
+            <button
+              id="btn-test-connection"
+              class="secondary"
+              type="button"
+              data-i18n="testConnection"
+            >
+              Testar conexão
+            </button>
+            <span id="connection-result" class="muted"></span>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-i18n="modelAndAgent">Modelo e agente</h3>
+          <label class="field">
+            <span data-i18n="model">Modelo</span>
+            <select id="setting-model"></select>
+          </label>
+          <label class="field">
+            <span data-i18n="agent">Agente</span>
+            <select id="setting-agent"></select>
+          </label>
+          <p class="hint" data-i18n="agentHint">
+            O agente e as permissões vêm da configuração global do OpenCode.
+          </p>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-i18n="context">Contexto</h3>
+          <label class="checkbox">
+            <input id="setting-include-document" type="checkbox" checked />
+            <span data-i18n="includeDocument"
+              >Enviar o documento inteiro nas mensagens</span
+            >
+          </label>
+          <p class="hint" data-i18n="contextHint">
+            O conteúdo do documento é enviado ao provedor do modelo escolhido.
+            Se o documento for muito grande, ele será truncado.
+          </p>
+          <label class="field">
+            <span data-i18n="language">Idioma da interface</span>
+            <select id="setting-language">
+              <option value="pt-BR">Português (Brasil)</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-i18n="diagnostics">Diagnóstico</h3>
+          <pre id="diagnostics" class="diagnostics"></pre>
+          <div class="settings-row">
+            <button
+              id="btn-copy-diagnostics"
+              class="secondary"
+              type="button"
+              data-i18n="copyDiagnostics"
+            >
+              Copiar diagnóstico
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <div class="dialog-footer">
+        <button
+          id="btn-settings-save"
+          class="primary"
+          type="button"
+          data-i18n="save"
+        >
+          Salvar
+        </button>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+
+    <script src="scripts/bridge-config.js"></script>
+    <script src="scripts/i18n.js"></script>
+    <script src="scripts/markdown.js"></script>
+    <script src="scripts/context.js"></script>
+    <script src="scripts/plugin.js"></script>
+  </body>
+</html>

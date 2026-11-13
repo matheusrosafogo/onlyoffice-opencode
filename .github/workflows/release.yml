@@ -1,0 +1,34 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Checks
+        run: nix flake check --print-build-logs
+
+      - name: Build .plugin
+        run: nix build .#plugin-zip --print-build-logs
+
+      - name: Prepare artifact
+        run: cp result/onlyoffice-opencode.plugin onlyoffice-opencode.plugin
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: onlyoffice-opencode.plugin
+          generate_release_notes: true
