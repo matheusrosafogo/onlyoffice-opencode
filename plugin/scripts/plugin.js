@@ -1,10 +1,17 @@
 (function () {
   "use strict";
 
-  const PLUGIN_VERSION = "0.3.1";
+  const PLUGIN_VERSION = "0.4.0";
   const STORAGE_KEY = "oo-opencode.settings.v1";
   const DEFAULT_BRIDGE_URL = "http://127.0.0.1:18765";
   const DEFAULT_BRIDGE_TOKEN = "onlyoffice-opencode-local";
+  const WRITE_TOOL_NAMES = new Set([
+    "insert_text",
+    "replace_selection",
+    "apply_office_doc",
+    "accept_all_revisions",
+    "reject_all_revisions",
+  ]);
 
   const t = (key, vars) => window.OO_I18N.t(key, vars);
   const ctx = window.OOContext;
@@ -37,7 +44,24 @@
     permission: null,
     pendingTimer: null,
     toastTimer: null,
+    toolQueue: Promise.resolve(),
   };
+
+  function isOnlyOfficeWriteAction(action) {
+    const value = String(action || "").toLowerCase();
+    if (!value) return false;
+    for (const name of WRITE_TOOL_NAMES) {
+      if (
+        value === name ||
+        value.endsWith(`_${name}`) ||
+        value.endsWith(`.${name}`) ||
+        value.endsWith(`:${name}`)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // --------------------------------------------------------------- utilidades
 
@@ -472,7 +496,8 @@
 
     (async () => {
       try {
-        const res = await fetch(withToken("/api/events"), {
+        const eventsPath = `/api/events?docKey=${encodeURIComponent(state.docKey || "")}`;
+        const res = await fetch(withToken(eventsPath), {
           signal: controller.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -539,6 +564,12 @@
 
   function handleEvent(event) {
     if (!event || typeof event !== "object") return;
+
+    if (event.type === "tool-call") {
+      if (event.docKey && event.docKey !== state.docKey) return;
+      handleToolCall(event);
+      return;
+    }
 
     if (event.sessionID) {
       if (!state.sessionID) state.sessionID = event.sessionID;
@@ -1012,8 +1043,10 @@
 
   // ---------------------------------------------------------------- ações
 
-  async function withTrackChanges(enabled, fn) {
+  async function withTrackChanges(enabled, fn, options) {
+    const strict = Boolean(options && options.strict);
     if (!enabled || state.editorType !== "word") {
+      if (strict) throw new Error(t("trackChangesUnavailable"));
       return fn(false);
     }
 
@@ -1037,15 +1070,15 @@
         const doc = Api.GetDocument();
         if (doc.SetAssistantTrackRevisions) {
           try {
-            doc.SetAssistantTrackRevisions(true, "OpenCode");
-            return "assistant";
+            if (doc.SetAssistantTrackRevisions(true, "OpenCode") !== false) {
+              return "assistant";
+            }
           } catch {
             // cai para o modo de revisão padrão
           }
         }
         if (doc.SetTrackRevisions) {
-          doc.SetTrackRevisions(true);
-          return "standard";
+          if (doc.SetTrackRevisions(true) !== false) return "standard";
         }
         return null;
       });
@@ -1055,6 +1088,7 @@
     }
 
     if (!trackingMode) {
+      if (strict) throw new Error(t("trackChangesUnavailable"));
       toast(t("trackChangesUnavailable"), "warn");
       return fn(false);
     }
@@ -1085,41 +1119,42 @@
     return true;
   }
 
-  async function insertText(text) {
-    const spec = officeDoc && officeDoc.extract(text);
-    const requestedTrackChanges =
-      spec && spec.trackChanges !== undefined
-        ? Boolean(spec.trackChanges)
-        : Boolean(state.settings.trackChanges);
+  function officeDocOutcome(result, tracked) {
+    return {
+      kind: "office-doc",
+      tracked,
+      formatted: true,
+      applied: result && result.applied ? result.applied : 0,
+      tables: result && result.tables ? result.tables : 0,
+      textBoxes: result && result.textBoxes ? result.textBoxes : 0,
+      skipped: result && result.skipped ? result.skipped : 0,
+    };
+  }
 
-    try {
-      await withTrackChanges(requestedTrackChanges, async (tracked) => {
+  async function applyInsertion(text, options) {
+    const opts = options || {};
+    const formatted = opts.formatted !== false;
+    const requestedTrackChanges = Boolean(opts.trackChanges);
+    const spec = officeDoc && officeDoc.extract(text);
+    let outcome = null;
+
+    await withTrackChanges(
+      requestedTrackChanges,
+      async (tracked) => {
         if (spec && state.editorType === "word") {
           try {
             const result = await officeDoc.apply(spec);
-            toast(
-              tracked ? t("insertedTracked") : t("insertedFormatted"),
-              "success",
-            );
-            if (result && result.skipped) {
-              console.warn(
-                "[opencode] blocos ignorados no office-doc:",
-                result.skipped,
-              );
-            }
+            outcome = officeDocOutcome(result, tracked);
             return;
           } catch (error) {
             console.warn("[opencode] office-doc", error);
           }
         }
 
-        if (state.settings.richInsert && state.editorType === "word") {
+        if (formatted && state.editorType === "word") {
           try {
             if (await pasteRich(text)) {
-              toast(
-                tracked ? t("insertedTracked") : t("insertedFormatted"),
-                "success",
-              );
+              outcome = { kind: "rich", tracked, formatted: true };
               return;
             }
           } catch (error) {
@@ -1128,50 +1163,41 @@
         }
 
         await ctx.executeMethod("PasteText", [text]);
-        toast(tracked ? t("insertedTracked") : t("inserted"), "success");
-      });
-    } catch (error) {
-      console.warn("[opencode] insert", error);
-      toast(t("insertError"), "error");
-    }
+        outcome = { kind: "text", tracked, formatted: false };
+      },
+      { strict: Boolean(opts.strictTrackChanges) },
+    );
+
+    return outcome || { kind: "text", tracked: false, formatted: false };
   }
 
-  async function replaceSelection(text) {
+  async function applyReplacement(text, options) {
+    const opts = options || {};
+    const formatted = opts.formatted !== false;
+    const requestedTrackChanges = Boolean(opts.trackChanges);
     const spec = officeDoc && officeDoc.extract(text);
-    const requestedTrackChanges =
-      spec && spec.trackChanges !== undefined
-        ? Boolean(spec.trackChanges)
-        : Boolean(state.settings.trackChanges);
+    let outcome = null;
 
-    try {
-      await withTrackChanges(requestedTrackChanges, async (tracked) => {
+    await withTrackChanges(
+      requestedTrackChanges,
+      async (tracked) => {
         if (state.editorType === "word") {
           if (spec) {
-            try {
-              await officeDoc.apply(spec, { replaceSelection: true });
-              toast(
-                tracked ? t("replacedTracked") : t("replacedFormatted"),
-                "success",
-              );
-              return;
-            } catch (error) {
-              console.warn("[opencode] replace office-doc", error);
-              toast(t("replaceError"), "error");
-              return;
-            }
+            const result = await officeDoc.apply(spec, {
+              replaceSelection: true,
+            });
+            outcome = officeDocOutcome(result, tracked);
+            return;
           }
 
-          if (state.settings.richInsert) {
+          if (formatted) {
             try {
               await ctx.runInEditor(() => {
                 const range = Api.GetDocument().GetRangeBySelect();
                 if (range && range.Delete) range.Delete();
               });
               if (await pasteRich(text)) {
-                toast(
-                  tracked ? t("replacedTracked") : t("replacedFormatted"),
-                  "success",
-                );
+                outcome = { kind: "rich", tracked, formatted: true };
                 return;
               }
             } catch (error) {
@@ -1183,7 +1209,7 @@
             (value) => Api.ReplaceTextSmart(value.split(/\r?\n/)),
             text,
           );
-          toast(tracked ? t("replacedTracked") : t("replaced"), "success");
+          outcome = { kind: "text", tracked, formatted: false };
           return;
         }
 
@@ -1200,12 +1226,323 @@
         } else {
           await ctx.executeMethod("PasteText", [text]);
         }
-        toast(t("replaced"), "success");
+        outcome = { kind: "text", tracked: false, formatted: false };
+      },
+      { strict: Boolean(opts.strictTrackChanges) },
+    );
+
+    return outcome || { kind: "text", tracked: false, formatted: false };
+  }
+
+  async function insertText(text) {
+    const spec = officeDoc && officeDoc.extract(text);
+    const requestedTrackChanges =
+      spec && spec.trackChanges !== undefined
+        ? Boolean(spec.trackChanges)
+        : Boolean(state.settings.trackChanges);
+
+    try {
+      const result = await applyInsertion(text, {
+        formatted: Boolean(state.settings.richInsert),
+        trackChanges: requestedTrackChanges,
       });
+      toast(
+        result.tracked
+          ? t("insertedTracked")
+          : result.formatted
+            ? t("insertedFormatted")
+            : t("inserted"),
+        "success",
+      );
+      if (result.skipped) {
+        console.warn(
+          "[opencode] blocos ignorados no office-doc:",
+          result.skipped,
+        );
+      }
+    } catch (error) {
+      console.warn("[opencode] insert", error);
+      toast(t("insertError"), "error");
+    }
+  }
+
+  async function replaceSelection(text) {
+    const spec = officeDoc && officeDoc.extract(text);
+    const requestedTrackChanges =
+      spec && spec.trackChanges !== undefined
+        ? Boolean(spec.trackChanges)
+        : Boolean(state.settings.trackChanges);
+
+    try {
+      const result = await applyReplacement(text, {
+        formatted: Boolean(state.settings.richInsert),
+        trackChanges: requestedTrackChanges,
+      });
+      toast(
+        result.tracked
+          ? t("replacedTracked")
+          : result.formatted
+            ? t("replacedFormatted")
+            : t("replaced"),
+        "success",
+      );
     } catch (error) {
       console.warn("[opencode] replace", error);
       toast(t("replaceError"), "error");
     }
+  }
+
+  // ---------------------------------------------------- ferramentas (MCP)
+
+  function assertWriterTool() {
+    if (state.editorType !== "word") {
+      throw new Error(t("toolWriterOnly"));
+    }
+  }
+
+  function toolText(args) {
+    const text = typeof args.text === "string" ? args.text : "";
+    if (!text.trim()) throw new Error(t("toolEmptyText"));
+    if (text.length > 200000) {
+      throw new Error(t("toolTextTooLarge"));
+    }
+    return text;
+  }
+
+  async function toolGetDocument(args) {
+    assertWriterTool();
+    const format = args.format === "text" ? "text" : "markdown";
+    let maxChars = Number(args.maxChars);
+    if (!Number.isFinite(maxChars)) maxChars = 200000;
+    maxChars = Math.max(1000, Math.min(200000, Math.round(maxChars)));
+
+    const data = await ctx.runInEditor((requestedFormat) => {
+      const doc = Api.GetDocument();
+      let info = {};
+      try {
+        info = doc.GetDocumentInfo ? doc.GetDocumentInfo() : {};
+      } catch {
+        info = {};
+      }
+
+      let text = "";
+      if (requestedFormat === "markdown") {
+        try {
+          text = doc.ToMarkdown(false, false, true, false) || "";
+        } catch {
+          text = "";
+        }
+      }
+      if (!text) text = doc.GetText() || "";
+
+      return {
+        text,
+        title: info.Title || info.title || "",
+        pages: Number(info.Pages ?? info.pages ?? 0) || 0,
+        words: Number(info.Words ?? info.words ?? 0) || 0,
+        characters: Number(info.Characters ?? info.characters ?? 0) || 0,
+        paragraphs: Number(info.Paragraphs ?? info.paragraphs ?? 0) || 0,
+        elements: doc.GetElementsCount ? doc.GetElementsCount() : 0,
+      };
+    }, format);
+
+    const source = String(data.text || "");
+    const totalChars = source.length;
+    const truncated = totalChars > maxChars;
+    const text = truncated
+      ? `${source.slice(0, maxChars)}\n\n[... ${totalChars - maxChars} caracteres omitidos ...]`
+      : source;
+
+    return {
+      ok: true,
+      editorType: "word",
+      format,
+      title: data.title || state.title || "",
+      text,
+      truncated,
+      stats: {
+        pages: data.pages,
+        words: data.words,
+        characters: data.characters,
+        paragraphs: data.paragraphs,
+        elements: data.elements,
+        totalChars,
+        returnedChars: text.length,
+      },
+    };
+  }
+
+  async function toolGetSelection() {
+    assertWriterTool();
+    const type = await ctx.executeMethod("GetSelectionType");
+    const text = await ctx.getSelection("word");
+    return {
+      ok: true,
+      editorType: "word",
+      type: type || "none",
+      text: text || "",
+      chars: (text || "").length,
+    };
+  }
+
+  async function toolInsertText(args) {
+    assertWriterTool();
+    const text = toolText(args);
+    const result = await applyInsertion(text, {
+      formatted: args.formatted !== false,
+      trackChanges: true,
+      strictTrackChanges: true,
+    });
+    toast(t("insertedTracked"), "success");
+    return {
+      ok: true,
+      tool: "insert_text",
+      chars: text.length,
+      ...result,
+    };
+  }
+
+  async function toolReplaceSelection(args) {
+    assertWriterTool();
+    const text = toolText(args);
+
+    const type = await ctx.executeMethod("GetSelectionType");
+    const selected = await ctx.getSelection("word");
+    if (!selected.trim() && (!type || type === "none" || type === "drawing")) {
+      throw new Error(t("toolNoSelection"));
+    }
+
+    const result = await applyReplacement(text, {
+      formatted: args.formatted !== false,
+      trackChanges: true,
+      strictTrackChanges: true,
+    });
+    toast(t("replacedTracked"), "success");
+    return {
+      ok: true,
+      tool: "replace_selection",
+      chars: text.length,
+      ...result,
+    };
+  }
+
+  async function toolApplyOfficeDoc(args) {
+    assertWriterTool();
+    let spec = args.spec;
+    if (typeof spec === "string") {
+      try {
+        spec = JSON.parse(spec);
+      } catch {
+        throw new Error(t("toolInvalidSpec"));
+      }
+    }
+    if (!spec || typeof spec !== "object" || !Array.isArray(spec.blocks)) {
+      throw new Error(t("toolInvalidSpec"));
+    }
+
+    let outcome = null;
+    await withTrackChanges(
+      true,
+      async (tracked) => {
+        const result = await officeDoc.apply(spec);
+        outcome = officeDocOutcome(result, tracked);
+      },
+      { strict: true },
+    );
+
+    if (!outcome) throw new Error(t("toolInvalidSpec"));
+    toast(t("insertedTracked"), "success");
+    return {
+      ok: true,
+      tool: "apply_office_doc",
+      ...outcome,
+    };
+  }
+
+  async function toolRevisionAction(name) {
+    assertWriterTool();
+    const accept = name === "accept_all_revisions";
+    await ctx.runInEditor((shouldAccept) => {
+      const doc = Api.GetDocument();
+      if (shouldAccept) {
+        if (!doc.AcceptAllRevisionChanges) {
+          throw new Error("AcceptAllRevisionChanges indisponível");
+        }
+        doc.AcceptAllRevisionChanges();
+      } else {
+        if (!doc.RejectAllRevisionChanges) {
+          throw new Error("RejectAllRevisionChanges indisponível");
+        }
+        doc.RejectAllRevisionChanges();
+      }
+      return true;
+    }, accept);
+
+    toast(accept ? t("revisionsAccepted") : t("revisionsRejected"), "success");
+    return {
+      ok: true,
+      tool: name,
+      action: accept ? "accept" : "reject",
+    };
+  }
+
+  async function executeTool(name, args) {
+    const input = args && typeof args === "object" ? args : {};
+    switch (name) {
+      case "get_document":
+        return toolGetDocument(input);
+      case "get_selection":
+        return toolGetSelection();
+      case "insert_text":
+        return toolInsertText(input);
+      case "replace_selection":
+        return toolReplaceSelection(input);
+      case "apply_office_doc":
+        return toolApplyOfficeDoc(input);
+      case "accept_all_revisions":
+        return toolRevisionAction(name);
+      case "reject_all_revisions":
+        return toolRevisionAction(name);
+      default:
+        throw new Error(`Ferramenta desconhecida: ${name}`);
+    }
+  }
+
+  async function runToolCall(event) {
+    const payload = {
+      callID: event.callID,
+      docKey: state.docKey,
+    };
+
+    try {
+      payload.ok = true;
+      payload.result = await executeTool(event.name, event.arguments || {});
+    } catch (error) {
+      payload.ok = false;
+      payload.error = (error && error.message) || String(error);
+      console.warn("[opencode] ferramenta", event.name, error);
+    }
+
+    try {
+      await api("/api/tools/result", {
+        method: "POST",
+        body: payload,
+      });
+    } catch (error) {
+      console.warn(
+        "[opencode] falha ao devolver resultado da ferramenta",
+        error,
+      );
+    }
+  }
+
+  function handleToolCall(event) {
+    if (!event || !event.callID) return;
+    state.toolQueue = state.toolQueue
+      .then(() => runToolCall(event))
+      .catch((error) => {
+        console.warn("[opencode] fila de ferramentas", error);
+      });
   }
 
   async function handleMessageAction(action, messageId) {
@@ -1408,9 +1745,12 @@
     title.textContent = t("permissionTitle");
     els.permissionPanel.appendChild(title);
 
+    const writeAction = isOnlyOfficeWriteAction(event.action);
     const detail = document.createElement("div");
     detail.className = "permission-detail";
-    detail.textContent = t("permissionText", { action: event.action || "?" });
+    detail.textContent = writeAction
+      ? t("permissionWriteText", { action: event.action || "?" })
+      : t("permissionText", { action: event.action || "?" });
     els.permissionPanel.appendChild(detail);
 
     if (event.resources && event.resources.length) {
@@ -1446,7 +1786,9 @@
     deny.addEventListener("click", () => replyPermission("reject"));
 
     actions.appendChild(allowOnce);
-    actions.appendChild(allowAlways);
+    // Escritas no documento sempre pedem confirmação; não oferecemos
+    // "permitir sempre" para ferramentas onlyoffice_* de edição.
+    if (!writeAction) actions.appendChild(allowAlways);
     actions.appendChild(deny);
     els.permissionPanel.appendChild(actions);
     els.permissionPanel.classList.remove("hidden");
@@ -1727,7 +2069,19 @@
     insertText,
     replaceSelection,
     withTrackChanges,
+    executeTool,
+    showPermission,
+    hidePermission,
+    replyPermission,
     getSettings: () => ({ ...state.settings }),
+    getState: () => ({
+      editorType: state.editorType,
+      docKey: state.docKey,
+      sessionID: state.sessionID,
+      connected: state.connected,
+      messages: state.messages.length,
+      selectionChars: state.selectionChars,
+    }),
   };
 
   // O host do ONLYOFFICE chama Asc.plugin.init quando o painel abre.

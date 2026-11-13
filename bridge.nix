@@ -7,7 +7,7 @@
 
 stdenvNoCC.mkDerivation {
   pname = "onlyoffice-opencode-bridge";
-  version = "0.3.1";
+  version = "0.4.0";
 
   src = ./bridge;
   dontBuild = true;

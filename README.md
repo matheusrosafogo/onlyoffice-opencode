@@ -29,6 +29,9 @@ texto gerado.
   caixas de texto/quadros.
 - Track Changes no Writer: inserir ou substituir conteúdo como revisão
   atribuída a "OpenCode", com aceitar/rejeitar na aba Revisão.
+- Modo agêntico com ferramentas MCP: o OpenCode lê o documento, insere,
+  substitui a seleção, aplica `office-doc` e aceita/rejeita revisões
+  diretamente, com confirmação no painel e Track Changes obrigatório.
 - Ações rápidas: resumir, revisar, melhorar escrita, traduzir, explicar e
   layout avançado.
 - Modelos e agentes lidos da configuração global do OpenCode.
@@ -49,14 +52,21 @@ ONLYOFFICE Desktop Editors
         │ HTTP Basic (senha aleatória)
         ▼
   opencode serve (processo filho, banco isolado)
-        │
+        │ tools/call (MCP stdio)
         ▼
-  modelo escolhido no OpenCode
+  mcp-server.mjs ── HTTP local + token ──► bridge
+        │ SSE /api/events?docKey=...
+        ▼
+  plugin → Office API → documento no Writer
 ```
 
 O **bridge** existe porque o plugin roda em um iframe sandboxed e não pode
 iniciar processos. Ele esconde a senha do OpenCode, monta o prompt com o
 contexto do documento, mapeia documento → sessão e repassa o streaming.
+
+No modo agêntico, o OpenCode inicia `mcp-server.mjs` como processo filho. Cada
+chamada de ferramenta carrega `_meta["ai.opencode/sessionID"]`; o bridge usa o
+mapa `docKey → sessionID` para enviar a operação ao painel do documento certo.
 
 ## Requisitos
 
@@ -73,7 +83,7 @@ O repositório expõe um módulo NixOS. No seu `configuration.nix` (ou em
 ```nix
 let
   # Pine uma tag ou revisão para atualizações previsíveis:
-  oc = builtins.getFlake "github:matheusrosafogo/onlyoffice-opencode/v0.3.0";
+  oc = builtins.getFlake "github:matheusrosafogo/onlyoffice-opencode/v0.4.0";
 in
 {
   imports = [ oc.nixosModules.default ];
@@ -85,7 +95,7 @@ in
 }
 ```
 
-> Prefira fixar uma tag ou revisão (`.../v0.3.0` ou `.../<commit>`). O
+> Prefira fixar uma tag ou revisão (`.../v0.4.0` ou `.../<commit>`). O
 > `builtins.getFlake` sem revisão pode continuar usando uma resolução em cache
 > até você forçar a atualização do flake.
 
@@ -190,16 +200,50 @@ nix run github:matheusrosafogo/onlyoffice-opencode#install -- --uninstall --purg
 4. Use as ações rápidas ou **Ctrl+Enter** para enviar.
 5. Na resposta, use **Copiar**, **Inserir no cursor** ou
    **Substituir seleção**.
+6. Se o agente usar as ferramentas do ONLYOFFICE, aprove a permissão no painel
+   e acompanhe a edição na aba **Revisão**.
 
 O seletor de modelo e agente fica em **Configurações**. A opção “Enviar o
 documento inteiro nas mensagens” vem ligada por padrão; o conteúdo é truncado
 quando não cabe na janela do modelo.
 
+## Edição direta pelo agente (MCP)
+
+A partir da v0.4.0 o OpenCode pode editar o documento sem você copiar a
+resposta. O bridge gera automaticamente o `opencode.json` do workspace com um
+servidor MCP local e as permissões das ferramentas:
+
+| Ferramenta                        | Permissão | O que faz                           |
+| --------------------------------- | --------- | ----------------------------------- |
+| `onlyoffice_get_document`         | allow     | Lê o documento em Markdown ou texto |
+| `onlyoffice_get_selection`        | allow     | Lê a seleção ativa                  |
+| `onlyoffice_insert_text`          | ask       | Insere no cursor                    |
+| `onlyoffice_replace_selection`    | ask       | Substitui a seleção ativa           |
+| `onlyoffice_apply_office_doc`     | ask       | Aplica um spec `office-doc`         |
+| `onlyoffice_accept_all_revisions` | ask       | Aceita todas as revisões            |
+| `onlyoffice_reject_all_revisions` | ask       | Rejeita todas as revisões           |
+
+As ferramentas de leitura funcionam sem confirmação. Toda ferramenta de escrita
+abre o painel de permissão; para elas não existe **Permitir sempre**, porque
+cada alteração precisa ser confirmada. Se você negar, o agente recebe a recusa
+e deve parar.
+
+As ferramentas são **Writer-only**. Em planilhas, apresentações e PDFs elas
+retornam um erro claro; PDFs continuam somente leitura. Toda escrita é aplicada
+com Track Changes e autor `OpenCode`; se o modo de revisão não puder ser
+ativado, a ferramenta falha em vez de editar sem revisão.
+
+O painel precisa estar aberto no documento para receber a chamada. Se estiver
+fechado, o bridge responde “Abra o painel OpenCode no documento”. O workspace
+fica em `~/.local/share/onlyoffice-opencode/workspace` e o `AGENTS.md` desse
+diretório é gerenciado pelo bridge para explicar as ferramentas ao agente.
+
 ## Como funciona a inserção e a formatação
 
-O agente **não edita o documento diretamente**. Ele lê o contexto, gera a
-resposta em Markdown e o plugin aplica o resultado quando você clica em
-**Inserir no cursor** ou **Substituir seleção**:
+O painel tem dois caminhos: o agente pode editar diretamente pelas ferramentas
+MCP ou você pode aplicar manualmente a resposta. No caminho manual, o agente lê
+o contexto, gera a resposta em Markdown e o plugin aplica o resultado quando
+você clica em **Inserir no cursor** ou **Substituir seleção**:
 
 - **Writer:** o Markdown é convertido para HTML e inserido com `PasteHtml`.
   Títulos (`##`), negrito, itálico, listas, tabelas, citações e blocos de
@@ -295,12 +339,13 @@ Track Changes no Writer**. Ao inserir ou substituir conteúdo, o plugin:
 4. restaura o estado anterior ao terminar.
 
 As revisões aparecem na aba **Revisão** do ONLYOFFICE, onde você pode
-aceitá-las ou rejeitá-las. No bloco `office-doc`, use `"trackChanges": true`
-para forçar revisões naquela inserção ou `false` para ignorar a preferência do
-painel.
+aceitá-las ou rejeitá-las. No bloco `office-doc` aplicado manualmente, use
+`"trackChanges": true` para forçar revisões naquela inserção ou `false` para
+ignorar a preferência do painel.
 
-Track Changes é aplicado apenas no Writer. Planilhas e apresentações continuam
-com inserção de texto simples; PDFs não são modificados.
+As ferramentas MCP de escrita ignoram essa preferência e **sempre** usam Track
+Changes. Track Changes é aplicado apenas no Writer. Planilhas e apresentações
+continuam com inserção de texto simples; PDFs não são modificados.
 
 ## Como funcionam as sessões e as credenciais
 
@@ -324,8 +369,10 @@ bridge. Para compartilhar o banco principal (sem isolamento), use
   qualquer ferramenta de IA. Desligue “Enviar o documento inteiro” se não quiser
   esse comportamento.
 - O agente e as permissões são herdados da configuração global do OpenCode.
-  Se você usa um agente com shell/edição, ele terá esses acessos também no
-  workspace do painel.
+  O bridge adiciona apenas o MCP `onlyoffice` e as permissões `onlyoffice_*` no
+  `opencode.json` do workspace; sua configuração global não é alterada. Se você
+  usa um agente com shell/edição, ele terá esses acessos também no workspace do
+  painel.
 - O bridge escuta apenas em `127.0.0.1`, exige token e responde CORS somente
   para a origem `null` (iframe do ONLYOFFICE) ou para a própria porta.
 - A senha do OpenCode usada pelo processo filho é aleatória e vive apenas em
@@ -393,10 +440,13 @@ quantidade de modelos/agentes — sem o token.
   tamanhos, espaçamento, margens e alinhamento específicos, use o bloco
   `office-doc`; o modelo é instruído a usá-lo quando você pedir esse nível de
   formatação.
-- Comentários automáticos ficam para uma próxima versão. Track Changes já está
-  disponível no Writer.
-- O agente não edita o documento diretamente; você aplica a resposta com os
-  botões do painel.
+- Comentários automáticos, busca/substituição e formatação de seleção por
+  ferramenta ficam para uma próxima versão. Track Changes já está disponível no
+  Writer.
+- As ferramentas MCP são somente para o Writer; planilhas, apresentações e PDFs
+  não são editados por elas.
+- O painel precisa estar aberto no documento para receber chamadas de
+  ferramentas. Se estiver fechado, o agente recebe um erro claro.
 - Atualizações da instalação manual exigem baixar/reinstalar o `.plugin` e
   rodar o instalador do bridge novamente.
 
@@ -417,7 +467,8 @@ Estrutura:
 
 ```text
 plugin/    interface do ONLYOFFICE (HTML/CSS/JS)
-bridge/    servidor Node e testes
+bridge/    servidor Node, servidor MCP stdio e testes
+test/      testes do parser office-doc e do servidor MCP
 scripts/   instalador e gerador de ícones
 *.nix      empacotamento e módulo NixOS
 ```

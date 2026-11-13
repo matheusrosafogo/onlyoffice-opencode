@@ -83,10 +83,10 @@
 
                 cp -R "$pluginSrc" plugin
                 mkdir -p test
-                cp "$testSrc/office-doc.test.mjs" test/
-                node --test test/office-doc.test.mjs
+                cp "$testSrc"/*.test.mjs test/
+                node --test test/*.test.mjs
 
-                for file in plugin/scripts/*.js; do
+                for file in plugin/scripts/*.js bridge/*.mjs; do
                   node --check "$file"
                 done
 

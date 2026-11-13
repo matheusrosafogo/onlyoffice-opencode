@@ -82,6 +82,15 @@
       replacedTracked: "Seleção substituída como revisão (OpenCode)",
       trackChangesUnavailable:
         "Track Changes indisponível; o conteúdo foi inserido normalmente.",
+      revisionsAccepted: "Revisões aceitas",
+      revisionsRejected: "Revisões rejeitadas",
+      toolWriterOnly:
+        "Ferramenta disponível apenas no editor de texto (Writer). Planilhas, apresentações e PDFs não são modificados.",
+      toolEmptyText: "O texto está vazio.",
+      toolTextTooLarge: "O texto excede o limite de 200000 caracteres.",
+      toolNoSelection: "Nenhuma seleção ativa no documento.",
+      toolInvalidSpec:
+        "O spec do office-doc é inválido: esperado um objeto com a lista blocks.",
       insertError: "Não foi possível inserir o texto",
       replaceError: "Não foi possível substituir a seleção",
       bridgeOffline:
@@ -104,6 +113,8 @@
       settingsSaved: "Configurações salvas",
       permissionTitle: "O OpenCode precisa de permissão",
       permissionText: "Ação: {action}",
+      permissionWriteText:
+        "O OpenCode quer alterar o documento ({action}). A alteração será registrada como revisão do OpenCode.",
       allowOnce: "Permitir uma vez",
       allowAlways: "Permitir sempre",
       deny: "Negar",
@@ -219,6 +230,15 @@
       replacedTracked: "Selection replaced as a tracked change (OpenCode)",
       trackChangesUnavailable:
         "Track Changes unavailable; content was inserted normally.",
+      revisionsAccepted: "Revisions accepted",
+      revisionsRejected: "Revisions rejected",
+      toolWriterOnly:
+        "Tool available only in the Writer editor. Spreadsheets, presentations and PDFs are not modified.",
+      toolEmptyText: "The text is empty.",
+      toolTextTooLarge: "The text exceeds the 200000 character limit.",
+      toolNoSelection: "No active selection in the document.",
+      toolInvalidSpec:
+        "Invalid office-doc spec: expected an object with a blocks array.",
       insertError: "Could not insert the text",
       replaceError: "Could not replace the selection",
       bridgeOffline:
@@ -240,6 +260,8 @@
       settingsSaved: "Settings saved",
       permissionTitle: "OpenCode needs permission",
       permissionText: "Action: {action}",
+      permissionWriteText:
+        "OpenCode wants to change the document ({action}). The change will be recorded as an OpenCode revision.",
       allowOnce: "Allow once",
       allowAlways: "Allow always",
       deny: "Deny",

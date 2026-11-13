@@ -30,9 +30,30 @@ import {
 } from "./normalize.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = "0.3.1";
+const VERSION = "0.4.0";
 const DEFAULT_TOKEN = "onlyoffice-opencode-local";
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
+const TOOL_TIMEOUT_MS = 60_000;
+
+const TOOL_NAMES = new Set([
+  "get_document",
+  "get_selection",
+  "insert_text",
+  "replace_selection",
+  "apply_office_doc",
+  "accept_all_revisions",
+  "reject_all_revisions",
+]);
+
+const TOOL_PERMISSIONS = [
+  { action: "onlyoffice_get_document", resource: "*", effect: "allow" },
+  { action: "onlyoffice_get_selection", resource: "*", effect: "allow" },
+  { action: "onlyoffice_insert_text", resource: "*", effect: "ask" },
+  { action: "onlyoffice_replace_selection", resource: "*", effect: "ask" },
+  { action: "onlyoffice_apply_office_doc", resource: "*", effect: "ask" },
+  { action: "onlyoffice_accept_all_revisions", resource: "*", effect: "ask" },
+  { action: "onlyoffice_reject_all_revisions", resource: "*", effect: "ask" },
+];
 
 function usage() {
   return `onlyoffice-opencode-bridge ${VERSION}
@@ -175,16 +196,79 @@ function ensureWorkspace(workspace) {
   fs.mkdirSync(workspace, { recursive: true });
   const template = path.join(__dirname, "workspace/AGENTS.md");
   const target = path.join(workspace, "AGENTS.md");
-  if (fs.existsSync(template) && !fs.existsSync(target)) {
-    fs.copyFileSync(template, target);
-  }
-  if (fs.existsSync(target)) {
-    // O arquivo vem do store (somente leitura); deixa o usuário editá-lo.
+  if (fs.existsSync(template)) {
+    const next = fs.readFileSync(template, "utf8");
+    let current = "";
+    try {
+      current = fs.readFileSync(target, "utf8");
+    } catch {
+      current = "";
+    }
+    // O AGENTS.md deste workspace é gerenciado pelo bridge para garantir que
+    // o agente sempre receba as instruções das ferramentas e do office-doc.
+    if (current !== next) fs.writeFileSync(target, next);
     try {
       fs.chmodSync(target, 0o644);
     } catch {
       // ignore
     }
+  }
+}
+
+function ensureWorkspaceConfig({ workspace, port, token }) {
+  const configPath = path.join(workspace, "opencode.json");
+  const mcpServerPath = path.join(__dirname, "mcp-server.mjs");
+  const nodePath = process.execPath;
+  const bridgeUrl = `http://127.0.0.1:${port}`;
+
+  let config = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      fs.copyFileSync(configPath, `${configPath}.bak`);
+    } catch {
+      console.warn(
+        `[bridge] ${configPath} não é JSON válido; não vou sobrescrever. ` +
+          "Remova o arquivo ou corrija o JSON para habilitar as ferramentas MCP.",
+      );
+      return;
+    }
+  }
+
+  config.$schema = config.$schema || "https://opencode.ai/config.json";
+  config.mcp = config.mcp && typeof config.mcp === "object" ? config.mcp : {};
+  config.mcp.servers =
+    config.mcp.servers && typeof config.mcp.servers === "object"
+      ? config.mcp.servers
+      : {};
+  config.mcp.servers.onlyoffice = {
+    type: "local",
+    command: [nodePath, mcpServerPath],
+    environment: {
+      OPENCODE_ONLYOFFICE_BRIDGE: bridgeUrl,
+      OPENCODE_ONLYOFFICE_TOKEN: token,
+    },
+    codemode: false,
+    timeout: { execution: 120_000 },
+  };
+
+  const basePermissions = Array.isArray(config.permissions)
+    ? config.permissions.filter(
+        (rule) =>
+          !String(rule && rule.action ? rule.action : "").startsWith(
+            "onlyoffice_",
+          ),
+      )
+    : [];
+  config.permissions = [...basePermissions, ...TOOL_PERMISSIONS];
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log(`[bridge] MCP onlyoffice configurado em ${configPath}`);
+  } catch (error) {
+    console.warn(
+      `[bridge] não foi possível escrever ${configPath}: ${formatError(error)}`,
+    );
   }
 }
 
@@ -264,6 +348,8 @@ class Bridge {
     this.eventAbort = null;
     this.heartbeat = null;
     this.refreshInFlight = new Map();
+    this.toolClients = new Map();
+    this.pendingToolCalls = new Map();
   }
 
   async start() {
@@ -347,7 +433,7 @@ class Bridge {
     }
   }
 
-  addSseClient(req, res) {
+  addSseClient(req, res, docKey) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -356,7 +442,25 @@ class Bridge {
     });
     res.write("retry: 3000\n\n");
     this.clients.add(res);
-    req.on("close", () => this.clients.delete(res));
+
+    if (docKey && isValidDocKey(docKey)) {
+      const previous = this.toolClients.get(docKey);
+      if (previous && previous !== res) {
+        try {
+          previous.end();
+        } catch {
+          // ignore
+        }
+      }
+      this.toolClients.set(docKey, res);
+    }
+
+    req.on("close", () => {
+      this.clients.delete(res);
+      if (docKey && this.toolClients.get(docKey) === res) {
+        this.toolClients.delete(docKey);
+      }
+    });
   }
 
   cors(req, res) {
@@ -487,8 +591,20 @@ class Bridge {
         return;
       }
 
+      if (route === "/api/tools/call" && req.method === "POST") {
+        const body = await readJson(req);
+        sendJson(res, 200, { ok: true, result: await this.callTool(body) });
+        return;
+      }
+
+      if (route === "/api/tools/result" && req.method === "POST") {
+        const body = await readJson(req);
+        sendJson(res, 200, this.resolveToolCall(body));
+        return;
+      }
+
       if (route === "/api/events" && req.method === "GET") {
-        this.addSseClient(req, res);
+        this.addSseClient(req, res, docKey);
         return;
       }
 
@@ -814,13 +930,107 @@ class Bridge {
     if (!["once", "always", "reject"].includes(reply))
       throw new Error("reply inválido");
 
+    console.log(`[bridge] permissão ${requestID} respondida com ${reply}`);
     await this.oc.request(
       `/api/session/${sessionID}/permission/${requestID}/reply`,
       {
         method: "POST",
-        body: { reply },
+        body: { decision: reply },
       },
     );
+    return { ok: true };
+  }
+
+  async callTool({ name, arguments: args, sessionID }) {
+    if (!TOOL_NAMES.has(name)) {
+      throw new OpenCodeError(`Ferramenta desconhecida: ${name}`, {
+        status: 400,
+      });
+    }
+
+    let docKey = null;
+    if (sessionID) {
+      const entry = this.store
+        .list()
+        .find((item) => item.sessionID === sessionID);
+      if (entry) docKey = entry.docKey;
+    }
+    if (!docKey && this.toolClients.size === 1) {
+      docKey = [...this.toolClients.keys()][0];
+    }
+    if (!docKey) {
+      throw new OpenCodeError(
+        "Sessão sem documento associado. Abra o painel OpenCode no documento.",
+        { status: 409 },
+      );
+    }
+
+    const client = this.toolClients.get(docKey);
+    if (!client) {
+      throw new OpenCodeError(
+        "Abra o painel OpenCode no documento para usar as ferramentas.",
+        { status: 409 },
+      );
+    }
+
+    const callID = crypto.randomUUID();
+    const promise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingToolCalls.delete(callID);
+        reject(
+          new OpenCodeError(
+            "Tempo esgotado aguardando o ONLYOFFICE responder à ferramenta.",
+            { status: 504 },
+          ),
+        );
+      }, TOOL_TIMEOUT_MS);
+      this.pendingToolCalls.set(callID, { resolve, reject, timer, docKey });
+    });
+
+    try {
+      client.write(
+        `data: ${JSON.stringify({
+          type: "tool-call",
+          callID,
+          docKey,
+          name,
+          arguments: args || {},
+        })}\n\n`,
+      );
+    } catch (error) {
+      const pending = this.pendingToolCalls.get(callID);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingToolCalls.delete(callID);
+      }
+      throw new OpenCodeError(
+        `Falha ao enviar a ferramenta ao plugin: ${formatError(error)}`,
+        { status: 502 },
+      );
+    }
+
+    return promise;
+  }
+
+  resolveToolCall({ callID, docKey, ok, result, error }) {
+    const pending = this.pendingToolCalls.get(callID);
+    if (!pending) return { ok: false, reason: "chamada não encontrada" };
+    if (docKey && pending.docKey !== docKey) {
+      return { ok: false, reason: "documento não corresponde" };
+    }
+
+    clearTimeout(pending.timer);
+    this.pendingToolCalls.delete(callID);
+    if (ok) {
+      pending.resolve(result === undefined ? {} : result);
+    } else {
+      pending.reject(
+        new OpenCodeError(
+          error || "Falha ao executar a ferramenta no ONLYOFFICE",
+          { status: 500 },
+        ),
+      );
+    }
     return { ok: true };
   }
 
@@ -828,6 +1038,12 @@ class Bridge {
     this.stopped = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.eventAbort) this.eventAbort.abort();
+    for (const pending of this.pendingToolCalls.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new OpenCodeError("Bridge encerrado", { status: 503 }));
+    }
+    this.pendingToolCalls.clear();
+    this.toolClients.clear();
     for (const res of this.clients) {
       try {
         res.end();
@@ -920,7 +1136,20 @@ async function main() {
   }
 
   fs.mkdirSync(args.stateDir, { recursive: true });
+  if (!args.port) args.port = await findFreePort();
   ensureWorkspace(args.workspace);
+  ensureWorkspaceConfig({
+    workspace: args.workspace,
+    port: args.port,
+    token: args.token,
+  });
+
+  if (args.opencodeUrl) {
+    console.warn(
+      "[bridge] --opencode-url usa um servidor externo; o opencode.json do workspace " +
+        "não é carregado por ele, então as ferramentas MCP podem não aparecer.",
+    );
+  }
 
   const store = new SessionStore(path.join(args.stateDir, "sessions.json"));
 
@@ -1017,7 +1246,15 @@ async function main() {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-main().catch((err) => {
-  console.error(`[bridge] erro fatal: ${formatError(err)}`);
-  process.exit(1);
-});
+export { Bridge, ensureWorkspaceConfig, TOOL_NAMES, TOOL_PERMISSIONS };
+
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  main().catch((err) => {
+    console.error(`[bridge] erro fatal: ${formatError(err)}`);
+    process.exit(1);
+  });
+}

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0
+
+- Modo agêntico com servidor MCP local (stdio): o OpenCode lê e edita o
+  documento diretamente.
+- Ferramentas: `get_document`, `get_selection`, `insert_text`,
+  `replace_selection`, `apply_office_doc`, `accept_all_revisions` e
+  `reject_all_revisions`.
+- Roteamento por `sessionID` do OpenCode para o painel do documento correto,
+  inclusive com várias janelas abertas.
+- Track Changes obrigatório em toda escrita, com autor `OpenCode`; a ferramenta
+  falha se o modo de revisão não puder ser ativado.
+- Permissões: leituras são `allow`; escritas são `ask`. O botão "Permitir
+  sempre" não aparece para escritas `onlyoffice_*`.
+- Ferramentas Writer-only; planilhas, apresentações e PDFs retornam erro claro.
+- O bridge gera/atualiza o `opencode.json` do workspace e o `AGENTS.md` com as
+  instruções das ferramentas.
+- Testes do protocolo MCP, do roteamento bridge/SSE e do gerador de configuração.
+
 ## 0.3.1
 
 - Track Changes no Writer: inserir e substituir conteúdo como revisão
