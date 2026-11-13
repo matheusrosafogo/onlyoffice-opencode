@@ -24,7 +24,11 @@ texto gerado.
 - Inserção formatada no Writer: títulos, negrito, itálico, listas, tabelas e
   blocos de código são convertidos de Markdown para HTML e aplicados com
   `PasteHtml`.
-- Ações rápidas: resumir, revisar, melhorar escrita, traduzir e explicar.
+- Formatação avançada via bloco `office-doc`: fontes, tamanhos, cores,
+  espaçamento, alinhamento, margens, quebras de página, tabelas nativas e
+  caixas de texto/quadros.
+- Ações rápidas: resumir, revisar, melhorar escrita, traduzir, explicar e
+  layout avançado.
 - Modelos e agentes lidos da configuração global do OpenCode.
 - Permissões (`permission.asked`) podem ser respondidas no próprio painel.
 - Sessão persistente por documento.
@@ -205,6 +209,74 @@ padrão e pode ser desligada nas configurações para inserir texto puro.
 Se você pedir “gere três seções com títulos e uma lista”, o modelo devolve
 Markdown estruturado e o Writer recebe os títulos e a lista já formatados.
 
+### Formatação avançada com `office-doc`
+
+Para fontes específicas, tamanhos, cores, espaçamento, alinhamento, margens,
+quebras de página, tabelas nativas e quadros/caixas de texto, o modelo usa um
+bloco JSON `office-doc`. O plugin aplica o bloco diretamente pela Office API,
+sem passar por HTML:
+
+````markdown
+```office-doc
+{
+  "page": { "marginsCm": { "top": 2.5, "bottom": 2.5, "left": 2, "right": 2 } },
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "Relatório",
+      "font": "Arial",
+      "size": 18,
+      "color": "#1F4E79",
+      "align": "center"
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "lineSpacing": 1.5,
+      "runs": [
+        { "text": "Texto normal. " },
+        { "text": "Importante", "bold": true, "color": "#C00000" }
+      ]
+    },
+    {
+      "type": "table",
+      "header": true,
+      "rows": [
+        [{ "text": "Item", "bold": true }, { "text": "Valor", "bold": true }],
+        [{ "text": "Total" }, { "text": "10" }]
+      ]
+    },
+    {
+      "type": "textBox",
+      "widthCm": 10,
+      "heightCm": 4,
+      "fill": "#FFF2CC",
+      "borderColor": "#BF9000",
+      "runs": [{ "text": "Nota", "bold": true }]
+    }
+  ]
+}
+```
+````
+
+Campos suportados:
+
+- Texto: `font`, `size` (pontos), `color` (`#RRGGBB`), `bold`, `italic`,
+  `underline`, `letterSpacing`.
+- Parágrafo: `align`, `lineSpacing`, `spacingBefore`, `spacingAfter`,
+  `indentLeft`, `indentRight`, `indentFirstLine`, `pageBreakBefore`.
+- Blocos: `heading`, `paragraph`, `list`, `pageBreak`, `table`, `textBox`.
+- Tabelas: `header`, `widthPercent`, `borderColor`, `borderSizePt` e `rows`
+  (células com `text`/`runs`, `fill`, `align`, etc.).
+- Quadros: `widthCm`, `heightCm`, `fill`, `borderColor`, `borderWidthPt`,
+  `verticalAlign` e `paragraphs`.
+- Página: `marginsCm` com `top`, `bottom`, `left`, `right`.
+
+O schema completo também fica em `bridge/workspace/AGENTS.md`, que o OpenCode
+lê como instruções do workspace. A ação rápida **Layout avançado** pede uma
+resposta nesse formato.
+
 ## Como funcionam as sessões e as credenciais
 
 O bridge usa um banco isolado do OpenCode (`OPENCODE_DB`) para não misturar as
@@ -291,10 +363,11 @@ quantidade de modelos/agentes — sem o token.
 - PDF é somente leitura; a inserção fica desabilitada.
 - Em planilhas e apresentações a inserção é texto simples; formatação rica
   nessas editores fica para uma próxima versão.
-- No Writer, a formatação é mapeada para os estilos do ONLYOFFICE (títulos,
-  negrito, itálico, listas, tabelas, citações e código). Fontes, cores,
-  tamanhos, espaçamento e alinhamento específicos pedidos no texto ainda não
-  são aplicados automaticamente.
+- No Writer, o Markdown puro é mapeado para os estilos do ONLYOFFICE (títulos,
+  negrito, itálico, listas, tabelas, citações e código). Para fontes, cores,
+  tamanhos, espaçamento, margens e alinhamento específicos, use o bloco
+  `office-doc`; o modelo é instruído a usá-lo quando você pedir esse nível de
+  formatação.
 - Track changes e comentários automáticos ficam para uma próxima versão.
 - O agente não edita o documento diretamente; você aplica a resposta com os
   botões do painel.

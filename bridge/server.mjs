@@ -30,7 +30,7 @@ import {
 } from "./normalize.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const DEFAULT_TOKEN = "onlyoffice-opencode-local";
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 

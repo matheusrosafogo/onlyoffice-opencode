@@ -39,6 +39,91 @@ relevante.
 - Se o pedido for sobre uma planilha, deixe claro o intervalo/célula usado.
 - Se o pedido for sobre uma apresentação, indique o slide quando possível.
 
+## Formatação avançada com `office-doc`
+
+Quando o usuário pedir fontes específicas, tamanhos, cores, espaçamento,
+alinhamento, margens, quebras de página, tabelas ou quadros/caixas de texto,
+devolva o documento em um bloco `office-doc` com JSON neste formato:
+
+```office-doc
+{
+  "page": { "marginsCm": { "top": 2.5, "bottom": 2.5, "left": 2, "right": 2 } },
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "Título",
+      "font": "Arial",
+      "size": 18,
+      "color": "#1F4E79",
+      "bold": true,
+      "align": "center",
+      "spacingAfter": 12
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "lineSpacing": 1.5,
+      "spacingAfter": 6,
+      "runs": [
+        { "text": "Texto normal. " },
+        { "text": "Importante", "bold": true, "color": "#C00000" },
+        { "text": " resto.", "font": "Times New Roman", "size": 12 }
+      ]
+    },
+    { "type": "pageBreak" },
+    {
+      "type": "table",
+      "header": true,
+      "rows": [
+        [
+          { "text": "Nome", "fill": "#1F4E79", "color": "#FFFFFF" },
+          { "text": "Valor", "fill": "#1F4E79", "color": "#FFFFFF" }
+        ],
+        [{ "text": "Item" }, { "text": "10" }]
+      ]
+    },
+    {
+      "type": "textBox",
+      "widthCm": 10,
+      "heightCm": 4,
+      "fill": "#FFF2CC",
+      "borderColor": "#BF9000",
+      "borderWidthPt": 1,
+      "runs": [{ "text": "Nota importante", "bold": true, "size": 12 }]
+    }
+  ]
+}
+```
+
+Regras:
+
+- `blocks[].type`: `heading`, `paragraph`, `list`, `pageBreak`, `table` ou
+  `textBox`.
+- Propriedades de texto (no bloco, em `runs` ou em células): `font` (nome
+  exato), `size` (pontos), `color` (`#RRGGBB`), `bold`, `italic`, `underline`,
+  `letterSpacing` (pontos).
+- Parágrafo: `align` (`left`, `center`, `right`, `justify`), `lineSpacing`
+  (número = múltiplo; ou `{ "value": 18, "rule": "exact" }`),
+  `spacingBefore`/`spacingAfter` (pontos), `indentLeft`/`indentRight`/
+  `indentFirstLine` (cm), `pageBreakBefore`.
+- `list`: `ordered` (booleano) e `items` (strings ou objetos com `runs`).
+- `table`: `header` (booleano), `widthPercent`, `borderColor`, `borderSizePt`
+  e `rows` (cada célula pode ser string ou objeto com `text`/`runs`, `fill`,
+  `align`, `bold`, etc.).
+- `textBox`: `widthCm`, `heightCm`, `fill`, `borderColor`, `borderWidthPt`,
+  `verticalAlign` (`top`, `center`, `bottom`) e, opcionalmente, `paragraphs`.
+- `page.marginsCm`: `top`, `bottom`, `left`, `right` em centímetros.
+- Use o bloco **somente** quando o usuário pedir formatação/layout. Para texto
+  normal, use Markdown.
+- Fora do bloco, escreva no máximo uma frase curta de resumo. O conteúdo a ser
+  inserido no documento deve estar no bloco.
+- Não coloque o bloco dentro de outro bloco de código; use exatamente a cerca
+
+  ```office-doc.
+
+  ```
+
 ## Ferramentas e arquivos
 
 O workspace do OpenCode é separado do documento. O agente não consegue editar o

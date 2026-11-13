@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Formatação avançada no Writer via bloco `office-doc`: fontes, tamanhos,
+  cores, espaçamento, alinhamento, margens, quebras de página, tabelas nativas
+  e caixas de texto/quadros.
+- Card no chat para documentos estruturados, com resumo e especificação JSON.
+- Ação rápida "Layout avançado".
+- `AGENTS.md` com o schema `office-doc` e instruções de uso.
+- Bridge garante que o `AGENTS.md` do workspace seja editável.
+
 ## 0.2.0
 
 - Inserção formatada no Writer: Markdown convertido para HTML e aplicado com

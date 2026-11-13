@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const PLUGIN_VERSION = "0.2.0";
+  const PLUGIN_VERSION = "0.3.0";
   const STORAGE_KEY = "oo-opencode.settings.v1";
   const DEFAULT_BRIDGE_URL = "http://127.0.0.1:18765";
   const DEFAULT_BRIDGE_TOKEN = "onlyoffice-opencode-local";
@@ -9,6 +9,7 @@
   const t = (key, vars) => window.OO_I18N.t(key, vars);
   const ctx = window.OOContext;
   const md = window.OO_MARKDOWN;
+  const officeDoc = window.OO_OFFICE_DOC;
 
   const els = {};
   const state = {
@@ -617,6 +618,7 @@
       ["promptImprove", "quickImprove"],
       ["promptTranslate", "quickTranslate"],
       ["promptExplain", "quickExplain"],
+      ["promptAdvanced", "quickAdvanced"],
     ];
 
     for (const [promptKey, labelKey] of actions) {
@@ -656,6 +658,7 @@
       ["promptReview", "quickReview"],
       ["promptImprove", "quickImprove"],
       ["promptTranslate", "quickTranslate"],
+      ["promptAdvanced", "quickAdvanced"],
     ];
 
     for (const [promptKey, labelKey] of actions) {
@@ -738,7 +741,16 @@
     }
 
     if (message.role === "assistant") {
-      body.appendChild(md.render(message.text || ""));
+      const spec = officeDoc && officeDoc.extract(message.text);
+      if (spec) {
+        const without = message.text
+          .replace(/```(?:office-doc|json)[\s\S]*?```/i, "")
+          .trim();
+        if (without) body.appendChild(md.render(without));
+        body.appendChild(renderOfficeDocCard(spec, message.text || ""));
+      } else {
+        body.appendChild(md.render(message.text || ""));
+      }
     } else {
       body.textContent = message.text || "";
     }
@@ -787,6 +799,38 @@
     pre.textContent = stripAnsi(truncateText(content, 8000));
     details.appendChild(pre);
     return details;
+  }
+
+  function renderOfficeDocCard(spec, raw) {
+    const card = document.createElement("div");
+    card.className = "office-doc-card";
+
+    const title = document.createElement("div");
+    title.className = "office-doc-title";
+    title.textContent = t("officeDocTitle");
+    card.appendChild(title);
+
+    const info = officeDoc.summary(spec);
+    const summary = document.createElement("div");
+    summary.className = "office-doc-summary";
+    summary.textContent = t("officeDocSummary", {
+      blocks: info.blocks,
+      tables: info.tables,
+      textBoxes: info.textBoxes,
+    });
+    card.appendChild(summary);
+
+    const details = document.createElement("details");
+    details.className = "office-doc-json";
+    const label = document.createElement("summary");
+    label.textContent = t("officeDocShowJson");
+    details.appendChild(label);
+    const pre = document.createElement("pre");
+    pre.textContent = raw;
+    details.appendChild(pre);
+    card.appendChild(details);
+
+    return card;
   }
 
   function renderTools(tools) {
@@ -975,6 +1019,23 @@
 
   async function insertText(text) {
     try {
+      const spec = officeDoc && officeDoc.extract(text);
+      if (spec && state.editorType === "word") {
+        try {
+          const result = await officeDoc.apply(spec);
+          toast(t("insertedFormatted"), "success");
+          if (result && result.skipped) {
+            console.warn(
+              "[opencode] blocos ignorados no office-doc:",
+              result.skipped,
+            );
+          }
+          return;
+        } catch (error) {
+          console.warn("[opencode] office-doc", error);
+        }
+      }
+
       if (state.settings.richInsert && state.editorType === "word") {
         try {
           if (await pasteRich(text)) {
@@ -997,6 +1058,19 @@
   async function replaceSelection(text) {
     try {
       if (state.editorType === "word") {
+        const spec = officeDoc && officeDoc.extract(text);
+        if (spec) {
+          try {
+            await officeDoc.apply(spec, { replaceSelection: true });
+            toast(t("replacedFormatted"), "success");
+            return;
+          } catch (error) {
+            console.warn("[opencode] replace office-doc", error);
+            toast(t("replaceError"), "error");
+            return;
+          }
+        }
+
         if (state.settings.richInsert) {
           try {
             await ctx.runInEditor(() => {

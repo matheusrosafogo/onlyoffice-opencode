@@ -50,6 +50,7 @@
       quickImprove: "Melhorar escrita",
       quickTranslate: "Traduzir para inglês",
       quickExplain: "Explicar",
+      quickAdvanced: "Layout avançado",
       quickTranslatePt: "Traduzir para português",
       promptSummarize: "Resuma o documento em tópicos claros e objetivos.",
       promptReview:
@@ -61,6 +62,8 @@
       promptTranslatePt:
         "Traduza o texto selecionado (ou o documento inteiro, se não houver seleção) para português, mantendo o tom e a terminologia do documento.",
       promptExplain: "Explique o conteúdo do documento em linguagem simples.",
+      promptAdvanced:
+        "Formate o conteúdo atual como um documento profissional usando um bloco ```office-doc```. Aplique títulos, fontes, tamanhos, cores, alinhamento, espaçamento e margens adequados. Inclua tabelas ou quadros se ajudar a organizar o conteúdo.",
       you: "Você",
       assistant: "OpenCode",
       thinking: "Pensando…",
@@ -118,6 +121,10 @@
       apply: "Aplicar",
       reasoning: "Raciocínio",
       tool: "Ferramenta",
+      officeDocTitle: "Documento estruturado pronto para inserir",
+      officeDocSummary:
+        "{blocks} blocos · {tables} tabelas · {textBoxes} quadros",
+      officeDocShowJson: "Ver especificação JSON",
       showMore: "Mostrar detalhes",
       showLess: "Ocultar detalhes",
       sessionError: "Erro na sessão",
@@ -173,6 +180,7 @@
       quickImprove: "Improve writing",
       quickTranslate: "Translate to English",
       quickExplain: "Explain",
+      quickAdvanced: "Advanced layout",
       quickTranslatePt: "Translate to Portuguese",
       promptSummarize:
         "Summarize the document in clear, objective bullet points.",
@@ -185,6 +193,8 @@
       promptTranslatePt:
         "Translate the selected text (or the whole document if there is no selection) to Portuguese, keeping the document's tone and terminology.",
       promptExplain: "Explain the document content in simple terms.",
+      promptAdvanced:
+        "Format the current content as a professional document using an ```office-doc``` block. Apply suitable headings, fonts, sizes, colors, alignment, spacing and margins. Include tables or text boxes if they help organize the content.",
       you: "You",
       assistant: "OpenCode",
       thinking: "Thinking…",
@@ -241,6 +251,10 @@
       apply: "Apply",
       reasoning: "Reasoning",
       tool: "Tool",
+      officeDocTitle: "Structured document ready to insert",
+      officeDocSummary:
+        "{blocks} blocks · {tables} tables · {textBoxes} text boxes",
+      officeDocShowJson: "Show JSON specification",
       showMore: "Show details",
       showLess: "Hide details",
       sessionError: "Session error",

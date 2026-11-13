@@ -71,14 +71,22 @@
             pkgs.runCommand "onlyoffice-opencode-tests"
               {
                 nativeBuildInputs = [ pkgs.nodejs ];
-                src = ./bridge;
+                bridgeSrc = ./bridge;
+                pluginSrc = ./plugin;
+                testSrc = ./test;
               }
               ''
-                cp -R "$src" bridge
+                cp -R "$bridgeSrc" bridge
                 cd bridge
                 node --test test/*.test.mjs
+                cd ..
 
-                for file in ${./plugin}/scripts/*.js; do
+                cp -R "$pluginSrc" plugin
+                mkdir -p test
+                cp "$testSrc/office-doc.test.mjs" test/
+                node --test test/office-doc.test.mjs
+
+                for file in plugin/scripts/*.js; do
                   node --check "$file"
                 done
 
