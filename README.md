@@ -21,6 +21,9 @@ texto gerado.
   - PDF: somente a seleção.
 - Ações por resposta: **Copiar**, **Inserir no cursor** e
   **Substituir seleção**.
+- Inserção formatada no Writer: títulos, negrito, itálico, listas, tabelas e
+  blocos de código são convertidos de Markdown para HTML e aplicados com
+  `PasteHtml`.
 - Ações rápidas: resumir, revisar, melhorar escrita, traduzir e explicar.
 - Modelos e agentes lidos da configuração global do OpenCode.
 - Permissões (`permission.asked`) podem ser respondidas no próprio painel.
@@ -181,6 +184,27 @@ O seletor de modelo e agente fica em **Configurações**. A opção “Enviar o
 documento inteiro nas mensagens” vem ligada por padrão; o conteúdo é truncado
 quando não cabe na janela do modelo.
 
+## Como funciona a inserção e a formatação
+
+O agente **não edita o documento diretamente**. Ele lê o contexto, gera a
+resposta em Markdown e o plugin aplica o resultado quando você clica em
+**Inserir no cursor** ou **Substituir seleção**:
+
+- **Writer:** o Markdown é convertido para HTML e inserido com `PasteHtml`.
+  Títulos (`##`), negrito, itálico, listas, tabelas, citações e blocos de
+  código são preservados. Em **Substituir seleção**, a seleção atual é apagada
+  e o HTML formatado é inserido no lugar.
+- **Planilha e apresentação:** a inserção usa `PasteText` (texto simples),
+  porque a API de plugins do ONLYOFFICE expõe `PasteHtml` apenas para o editor
+  de texto.
+- **PDF:** somente leitura; a inserção fica desabilitada.
+
+A opção **“Aplicar formatação ao inserir no Writer (Markdown)”** vem ligada por
+padrão e pode ser desligada nas configurações para inserir texto puro.
+
+Se você pedir “gere três seções com títulos e uma lista”, o modelo devolve
+Markdown estruturado e o Writer recebe os títulos e a lista já formatados.
+
 ## Como funcionam as sessões e as credenciais
 
 O bridge usa um banco isolado do OpenCode (`OPENCODE_DB`) para não misturar as
@@ -265,8 +289,9 @@ quantidade de modelos/agentes — sem o token.
 
 - Flatpak não suportado.
 - PDF é somente leitura; a inserção fica desabilitada.
-- A inserção é texto simples; formatação rica, track changes e comentários
-  ficam para uma próxima versão.
+- Em planilhas e apresentações a inserção é texto simples; formatação rica
+  nessas editores fica para uma próxima versão.
+- Track changes e comentários automáticos ficam para uma próxima versão.
 - O agente não edita o documento diretamente; você aplica a resposta com os
   botões do painel.
 - Atualizações da instalação manual exigem baixar/reinstalar o `.plugin` e

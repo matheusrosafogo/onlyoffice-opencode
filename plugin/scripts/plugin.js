@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const PLUGIN_VERSION = "0.1.0";
+  const PLUGIN_VERSION = "0.2.0";
   const STORAGE_KEY = "oo-opencode.settings.v1";
   const DEFAULT_BRIDGE_URL = "http://127.0.0.1:18765";
   const DEFAULT_BRIDGE_TOKEN = "onlyoffice-opencode-local";
@@ -64,6 +64,7 @@
     els.settingIncludeDocument = document.getElementById(
       "setting-include-document",
     );
+    els.settingRichInsert = document.getElementById("setting-rich-insert");
     els.settingLanguage = document.getElementById("setting-language");
     els.connectionResult = document.getElementById("connection-result");
     els.diagnostics = document.getElementById("diagnostics");
@@ -81,6 +82,7 @@
       model: "",
       agent: "",
       includeDocument: true,
+      richInsert: true,
       lang: window.OO_I18N.detect(),
     };
 
@@ -176,6 +178,39 @@
 
   function stripAnsi(text) {
     return String(text || "").replace(/\u001b\[[0-9;]*m/g, "");
+  }
+
+  function stripTags(html) {
+    return String(html || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function executeMethodWithTimeout(method, params, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`Tempo esgotado em ${method}`));
+      }, timeoutMs || 8000);
+
+      ctx
+        .executeMethod(method, params)
+        .then((value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        })
+        .catch((error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        });
+    });
   }
 
   // ------------------------------------------------------------- status / UI
@@ -930,8 +965,27 @@
 
   // ---------------------------------------------------------------- ações
 
+  async function pasteRich(text) {
+    if (!md.toHtml) return false;
+    const html = md.toHtml(text);
+    if (!html || !stripTags(html)) return false;
+    await executeMethodWithTimeout("PasteHtml", [html], 5000);
+    return true;
+  }
+
   async function insertText(text) {
     try {
+      if (state.settings.richInsert && state.editorType === "word") {
+        try {
+          if (await pasteRich(text)) {
+            toast(t("insertedFormatted"), "success");
+            return;
+          }
+        } catch (error) {
+          console.warn("[opencode] PasteHtml", error);
+        }
+      }
+
       await ctx.executeMethod("PasteText", [text]);
       toast(t("inserted"), "success");
     } catch (error) {
@@ -943,11 +997,30 @@
   async function replaceSelection(text) {
     try {
       if (state.editorType === "word") {
+        if (state.settings.richInsert) {
+          try {
+            await ctx.runInEditor(() => {
+              const range = Api.GetDocument().GetRangeBySelect();
+              if (range && range.Delete) range.Delete();
+            });
+            if (await pasteRich(text)) {
+              toast(t("replacedFormatted"), "success");
+              return;
+            }
+          } catch (error) {
+            console.warn("[opencode] replace rich", error);
+          }
+        }
+
         await ctx.runInEditor(
           (value) => Api.ReplaceTextSmart(value.split(/\r?\n/)),
           text,
         );
-      } else if (state.editorType === "cell") {
+        toast(t("replaced"), "success");
+        return;
+      }
+
+      if (state.editorType === "cell") {
         const ok = await ctx.runInEditor((value) => {
           const selection = Api.GetSelection();
           if (selection && selection.SetValue) {
@@ -1272,6 +1345,7 @@
     els.settingIncludeDocument.checked = Boolean(
       state.settings.includeDocument,
     );
+    els.settingRichInsert.checked = Boolean(state.settings.richInsert);
     els.settingLanguage.value = state.settings.lang || window.OO_I18N.getLang();
     els.connectionResult.textContent = "";
 
@@ -1325,6 +1399,7 @@
     state.settings.model = els.settingModel.value || "";
     state.settings.agent = els.settingAgent.value || "";
     state.settings.includeDocument = els.settingIncludeDocument.checked;
+    state.settings.richInsert = els.settingRichInsert.checked;
     state.settings.lang = els.settingLanguage.value || "pt-BR";
 
     window.OO_I18N.setLang(state.settings.lang);

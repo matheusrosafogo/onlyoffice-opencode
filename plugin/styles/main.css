@@ -474,6 +474,26 @@ button {
   color: var(--muted);
 }
 
+.message-text table.md-table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.message-text .md-table th,
+.message-text .md-table td {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.message-text .md-table th {
+  background: var(--bg-soft);
+  font-weight: 650;
+}
+
 .message-text hr {
   border: 0;
   border-top: 1px solid var(--border);

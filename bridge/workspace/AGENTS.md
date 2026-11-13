@@ -31,8 +31,11 @@ relevante.
 - Quando o usuário pedir para reescrever, corrigir, resumir ou traduzir um
   trecho, devolva o texto final pronto para ser inserido, sem comentários
   extras ao redor.
-- Use Markdown básico (títulos, listas, negrito e blocos de código) quando
-  ajudar a leitura.
+- Use Markdown para estruturar a resposta: títulos com `##`, negrito, listas,
+  tabelas com pipes e blocos de código. O painel aplica essa formatação ao
+  inserir no Writer.
+- Quando o pedido for para gerar texto para o documento, devolva o conteúdo
+  final em Markdown, sem cercar a resposta inteira em um bloco de código.
 - Se o pedido for sobre uma planilha, deixe claro o intervalo/célula usado.
 - Se o pedido for sobre uma apresentação, indique o slide quando possível.
 

@@ -108,8 +108,31 @@
       /^\s*>\s?/.test(line) ||
       /^\s*[-*+]\s+/.test(line) ||
       /^\s*\d+[.)]\s+/.test(line) ||
-      /^\s*([-*_])\1{2,}\s*$/.test(line)
+      /^\s*([-*_])\1{2,}\s*$/.test(line) ||
+      /^\s*\|.*\|\s*$/.test(line)
     );
+  }
+
+  function splitTableRow(line) {
+    let value = line.trim();
+    if (value.startsWith("|")) value = value.slice(1);
+    if (value.endsWith("|")) value = value.slice(0, -1);
+    return value.split("|").map((cell) => cell.trim());
+  }
+
+  function isTableSeparator(line) {
+    const value = line.trim();
+    if (!value.includes("|")) return false;
+    return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(value);
+  }
+
+  function tableAlignment(cell) {
+    const left = cell.startsWith(":");
+    const right = cell.endsWith(":");
+    if (left && right) return "center";
+    if (right) return "right";
+    if (left) return "left";
+    return "";
   }
 
   function render(text) {
@@ -217,6 +240,49 @@
         continue;
       }
 
+      if (
+        line.includes("|") &&
+        i + 1 < lines.length &&
+        isTableSeparator(lines[i + 1])
+      ) {
+        const header = splitTableRow(line);
+        const alignments = splitTableRow(lines[i + 1]).map(tableAlignment);
+        i += 2;
+
+        const rows = [];
+        while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+          rows.push(splitTableRow(lines[i]));
+          i += 1;
+        }
+
+        const table = elem("table", "md-table");
+        const thead = elem("thead");
+        const headRow = elem("tr");
+        header.forEach((cell, index) => {
+          const th = elem("th");
+          th.appendChild(inline(cell));
+          if (alignments[index]) th.style.textAlign = alignments[index];
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = elem("tbody");
+        for (const row of rows) {
+          const tr = elem("tr");
+          for (let index = 0; index < header.length; index += 1) {
+            const td = elem("td");
+            td.appendChild(inline(row[index] || ""));
+            if (alignments[index]) td.style.textAlign = alignments[index];
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        fragment.appendChild(table);
+        continue;
+      }
+
       const paragraphLines = [];
       while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
         paragraphLines.push(lines[i]);
@@ -237,8 +303,27 @@
     return fragment;
   }
 
+  function toHtml(text) {
+    const container = document.createElement("div");
+    container.appendChild(render(text));
+
+    for (const button of [...container.querySelectorAll("button")]) {
+      button.remove();
+    }
+    for (const block of [...container.querySelectorAll(".code-block")]) {
+      const pre = block.querySelector("pre");
+      if (pre) block.replaceWith(pre);
+    }
+    for (const head of [...container.querySelectorAll(".code-head")]) {
+      head.remove();
+    }
+
+    return container.innerHTML;
+  }
+
   root.OO_MARKDOWN = {
     render,
+    toHtml,
     setCopyHandler(handler) {
       copyHandler = handler;
     },

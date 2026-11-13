@@ -30,7 +30,7 @@ import {
 } from "./normalize.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const DEFAULT_TOKEN = "onlyoffice-opencode-local";
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 
@@ -177,6 +177,14 @@ function ensureWorkspace(workspace) {
   const target = path.join(workspace, "AGENTS.md");
   if (fs.existsSync(template) && !fs.existsSync(target)) {
     fs.copyFileSync(template, target);
+  }
+  if (fs.existsSync(target)) {
+    // O arquivo vem do store (somente leitura); deixa o usuário editá-lo.
+    try {
+      fs.chmodSync(target, 0o644);
+    } catch {
+      // ignore
+    }
   }
 }
 

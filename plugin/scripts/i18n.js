@@ -32,6 +32,9 @@
       noAgents: "Nenhum agente disponível",
       context: "Contexto",
       includeDocument: "Enviar o documento inteiro nas mensagens",
+      richInsert: "Aplicar formatação ao inserir no Writer (Markdown)",
+      richInsertHint:
+        "Títulos, negrito, listas e tabelas são aplicados no documento. Em planilhas e apresentações a inserção continua sendo texto simples.",
       contextHint:
         "O conteúdo do documento é enviado ao provedor do modelo escolhido. Se o documento for muito grande, ele será truncado.",
       language: "Idioma da interface",
@@ -65,8 +68,10 @@
       copied: "Copiado",
       insert: "Inserir no cursor",
       inserted: "Texto inserido",
+      insertedFormatted: "Texto formatado inserido",
       replace: "Substituir seleção",
       replaced: "Seleção substituída",
+      replacedFormatted: "Seleção substituída com formatação",
       insertError: "Não foi possível inserir o texto",
       replaceError: "Não foi possível substituir a seleção",
       bridgeOffline:
@@ -150,6 +155,9 @@
       noAgents: "No agents available",
       context: "Context",
       includeDocument: "Send the whole document with each message",
+      richInsert: "Apply formatting when inserting into Writer (Markdown)",
+      richInsertHint:
+        "Headings, bold, lists and tables are applied to the document. In spreadsheets and presentations the insertion remains plain text.",
       contextHint:
         "The document content is sent to the provider of the selected model. Very large documents are truncated.",
       language: "Interface language",
@@ -184,8 +192,10 @@
       copied: "Copied",
       insert: "Insert at cursor",
       inserted: "Text inserted",
+      insertedFormatted: "Formatted text inserted",
       replace: "Replace selection",
       replaced: "Selection replaced",
+      replacedFormatted: "Selection replaced with formatting",
       insertError: "Could not insert the text",
       replaceError: "Could not replace the selection",
       bridgeOffline:
